@@ -10,6 +10,15 @@
   并递增编号。给命令时若涉及 exp_N（如 test.py 的 checkpoint 路径），以 INDEX.md 为准。
 - 运行中断会留下残缺 exp_N 目录，重跑前先删除（见 INDEX.md 编号规则）。
 
+## Git / GitHub
+
+- 远程仓库：`git@github.com:408Survivor/HiFAG.git`（main 分支，2026-07-27 首次推送）。
+- 本机 DNS 把 github.com 解析到不可达的 20.205.x.x；已用 `~/.ssh/config` 把
+  `github.com` 直连真实 IP `140.82.112.3:22`（免 sudo 绕过），SSH key 为
+  `~/.ssh/id_ed25519`。git push/pull 直接可用；若失效，重测一个 140.82.x.x 可用 IP 替换。
+- `gh` CLI 已装但未登录（网页 API 域名不通，暂不依赖它）。
+- 提交署名（repo 本地配置）：408Survivor / 408Survivor@users.noreply.github.com。
+
 ## 项目定位
 
 HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark 细粒度面部图之上增加 **9-region 粗粒度面部图**，层级化面部建模用于 D-Vlog 抑郁检测。
