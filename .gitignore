@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Run artifacts (checkpoints are large; exp_N metadata stays tracked)
+*.pt
+outputs/

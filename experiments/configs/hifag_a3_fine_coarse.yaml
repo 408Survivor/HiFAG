@@ -1,0 +1,69 @@
+# HiFAG A3: fine 68-landmark graph + coarse 9-region graph (ablation A3).
+# Purpose: core hypothesis — the coarse branch adds signal on top of the
+# AFGNN fine branch (baseline: AFGNN face_enhanced_focal Test AUC 0.797 +/- 0.011).
+# Fine branch hyperparameters mirror AFGNN's face_enhanced_focal config.
+# Training recipe follows the SFAF best practice: focal loss (a=0.25, g=2.0),
+# AUC early stopping, dropout 0.5.
+
+data:
+  processed_dir: /data/ltq/DVlog/processed_official_features
+  num_frames: 32
+  audio_num_frames: 32
+
+model:
+  use_fine: true
+  use_coarse: true
+  use_audio: false
+
+  # Fine branch (AFGNN FaceGNN, mirrors afgnn_face_enhanced_focal.yaml)
+  face_in_channels: 13      # [x, y, dx, dy] + 9-dim region one-hot
+  face_hidden_channels: 128
+  face_out_channels: 128
+  face_num_layers: 3
+  face_heads: 4
+
+  # Coarse branch (RegionGNN)
+  coarse_in_channels: 10      # hand-crafted region descriptors (FEATURE_DIM)
+  coarse_hidden_channels: 64
+  coarse_out_channels: 64
+  coarse_num_layers: 2
+  coarse_heads: 4
+  coarse_edge_mode: "anatomical"   # "anatomical" | "full" (ablation A6)
+  coarse_normalize: true
+
+  # Classification head
+  mlp_hidden: 128
+  dropout: 0.5
+
+  # Fine face graph structure
+  add_static_edges: true
+  add_temporal_edges: true
+  add_region_onehot: true
+  add_self_loops: true
+
+# Data augmentation disabled
+augmentation:
+  enabled: false
+
+training:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  patience: 15
+  lr: 0.001
+  weight_decay: 0.0001
+  checkpoint_path: experiments/checkpoints/hifag_a3_fine_coarse_best.pt
+
+  early_stopping_metric: "auc"
+
+  # Loss: focal (SFAF best recipe; do NOT lower alpha below 0.25)
+  loss: "focal"
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+  scheduler:
+    type: "plateau"
+    factor: 0.5
+    patience: 5
+
+  grad_clip: 1.0
