@@ -73,12 +73,14 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-1. 跑 A2：`python src/train.py --config experiments/configs/hifag_a2_coarse_only.yaml --seed 42`
-2. 跑 A3：`python src/train.py --config experiments/configs/hifag_a3_fine_coarse.yaml --seed 42`
-3. 评估：`python src/test.py --config <yaml> --checkpoint <exp_N>/best_seed42.pt --split test`
-4. 多 seed（42~46）。对照基线：AFGNN `face_enhanced_focal` Test AUC **0.797 ± 0.011**（5 seeds，划分一致）。
-5. 视结果做 A4~A7 消融（对称性/运动特征、边拓扑、音频）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
-6. 第二阶段：层级交互（fine↔coarse 消息传递），A3 有增量才做。
+当前进度：**exp_1（A2 粗图单独，seed 42）已完成**（test AUC 0.6728，详见 INDEX.md / PROGRESS.md）。
+实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_2**。
+
+1. 跑 A3（核心假设）：`python src/train.py --config experiments/configs/hifag_a3_fine_coarse.yaml --seed 42` → 将是 exp_2
+2. 评估：`python src/test.py --config <yaml> --checkpoint <exp_N>/best_seed42.pt --split test`
+3. 多 seed（42~46）。对照基线：AFGNN `face_enhanced_focal` Test AUC **0.797 ± 0.011**（5 seeds，划分一致）。
+4. 视结果做 A4~A7 消融（对称性/运动特征、边拓扑、音频）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
+5. 第二阶段：层级交互（fine↔coarse 消息传递），A3 有增量才做。
 
 ## SFAF 教训（不要重犯）
 
