@@ -140,6 +140,39 @@ def test_model_forward_full_edges(data_dir):
     assert logit.shape == (BATCH_SIZE, 1)
 
 
+def test_model_forward_cross_attention(data_dir):
+    """A8: cross-attention fusion between face side (fine+coarse) and audio."""
+    cfg = _base_cfg(
+        data_dir, use_audio=True, fusion_type="cross_attention"
+    )
+    loaders = build_loaders(cfg, augment=False)
+    model = build_model(cfg)
+    model.eval()
+
+    batch = next(iter(loaders["valid"]))
+    with torch.no_grad():
+        logit = model(batch)
+    assert logit.shape == (BATCH_SIZE, 1)
+    assert torch.isfinite(logit).all()
+
+
+def test_cross_attention_requires_audio_and_face(data_dir):
+    """cross_attention without audio or without a face branch must raise."""
+    cfg = _base_cfg(data_dir, use_audio=False, fusion_type="cross_attention")
+    with pytest.raises(ValueError, match="cross_attention"):
+        build_model(cfg)
+
+    cfg = _base_cfg(
+        data_dir,
+        use_fine=False,
+        use_coarse=False,
+        use_audio=True,
+        fusion_type="cross_attention",
+    )
+    with pytest.raises(ValueError, match="cross_attention"):
+        build_model(cfg)
+
+
 def test_feature_contract_coarse_dim(data_dir):
     """Wrong coarse feature dim must raise, never silently truncate."""
     cfg = _base_cfg(data_dir, use_fine=False, use_coarse=True)

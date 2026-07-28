@@ -54,6 +54,9 @@ def build_model(cfg: dict, device=None):
         dropout=m.get("dropout", 0.5),
         num_edge_types=m.get("num_edge_types", None),
         edge_emb_dim=m.get("edge_emb_dim", 1),
+        # Fusion
+        fusion_type=m.get("fusion_type", "concat"),
+        fusion_hidden_dim=m.get("fusion_hidden_dim", 64),
     )
 
     if device is not None:

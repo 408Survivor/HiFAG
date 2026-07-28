@@ -5,8 +5,11 @@ Combines up to three branches with per-branch config switches:
   - coarse: RegionGNN over the 9-region graph with hand-crafted descriptors;
   - audio:  AFGNN AudioGNN over the temporal acoustic chain (reused).
 
-Stage-1 fusion is plain concat -> MLP (hierarchical fine<->coarse message
-passing is stage 2 and intentionally not implemented here).
+Stage-1 fusion is plain concat -> MLP by default; setting
+`fusion_type="cross_attention"` fuses the face side (fine+coarse concat) with
+the audio embedding via AFGNN's CrossModalAttentionFusion instead
+(hierarchical fine<->coarse message passing is stage 2 and intentionally not
+implemented here).
 
 Follows the AFGNN model interface: forward(data) -> (batch_size, 1) logit, so
 AFGNN's trainer (train_model / evaluate) works unchanged.
@@ -17,6 +20,7 @@ import torch.nn as nn
 
 from models.audio_gnn import AudioGNN
 from models.face_gnn import FaceGNN
+from models.fusion import CrossModalAttentionFusion
 
 from hifag.data.region_features import FEATURE_DIM, NUM_REGIONS
 from hifag.models.region_gnn import RegionGNN
@@ -36,6 +40,9 @@ class HiFAG(nn.Module):
         dropout: dropout probability (shared by all branches and the head).
         num_edge_types / edge_emb_dim: optional edge type embedding for the
             fine branch (passed through to FaceGNN).
+        fusion_type: "concat" (default) or "cross_attention" (face side vs
+            audio, requires use_audio and at least one face branch).
+        fusion_hidden_dim: attention hidden dim for cross_attention fusion.
     """
 
     def __init__(
@@ -69,6 +76,9 @@ class HiFAG(nn.Module):
         dropout: float = 0.5,
         num_edge_types: int = None,
         edge_emb_dim: int = 1,
+        # Fusion
+        fusion_type: str = "concat",
+        fusion_hidden_dim: int = 64,
     ):
         super().__init__()
         if not (use_fine or use_coarse or use_audio):
@@ -130,6 +140,24 @@ class HiFAG(nn.Module):
             classifier_in += coarse_out_channels
         if use_audio:
             classifier_in += audio_out_channels
+
+        # Cross-modal attention between the face side (fine+coarse concat) and
+        # audio. Output dims match concat, so classifier_in is unchanged.
+        face_dim = classifier_in - (audio_out_channels if use_audio else 0)
+        if fusion_type == "cross_attention":
+            if not (use_audio and face_dim > 0):
+                raise ValueError(
+                    "fusion_type='cross_attention' requires use_audio=True and "
+                    "at least one of use_fine/use_coarse."
+                )
+            self.fusion = CrossModalAttentionFusion(
+                face_dim, audio_out_channels, fusion_hidden_dim
+            )
+        elif fusion_type == "concat":
+            self.fusion = None
+        else:
+            raise ValueError(f"Unsupported fusion type: {fusion_type}")
+        self.fusion_type = fusion_type
 
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in, mlp_hidden),
@@ -224,7 +252,13 @@ class HiFAG(nn.Module):
                     ).repeat_interleave(num_frames)
                     audio_batch = audio_batch[:num_audio_nodes]
                 h_audio = self.audio_gnn(audio_x, batch=audio_batch)
-            embeddings.append(h_audio)
 
-        h = torch.cat(embeddings, dim=-1)
+        if self.fusion is not None:
+            # Face side = fine+coarse concat; attend face<->audio, then concat.
+            h_face = torch.cat(embeddings, dim=-1)
+            h = self.fusion(h_face, h_audio)
+        else:
+            if self.use_audio:
+                embeddings.append(h_audio)
+            h = torch.cat(embeddings, dim=-1)
         return self.classifier(h)

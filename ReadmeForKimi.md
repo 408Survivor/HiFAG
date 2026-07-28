@@ -86,9 +86,11 @@ A7 差 −0.021 未追平，主要差距候选是融合方式（A7 concat vs 基
 ⚠️ A7 有 3/5 seeds best valid 在 ep3~5，音频分支收敛很快，留意欠训练。
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_16**。
 
-1. 追平 0.797 基线：在 `src/hifag/models/hifag.py` 加 cross-attention 融合
-   （对齐 AFGNN `fusion_type: cross_attention` + `fusion_hidden_dim: 64`），
-   替换 A7 的 concat，重跑 5 seeds。
+1. 追平 0.797 基线：cross-attention 融合已实现（2026-07-28）——
+   `hifag.py` 复用 AFGNN `CrossModalAttentionFusion`（face 侧 = fine+coarse concat 192 维
+   vs audio 64 维，hidden 64），配置 `experiments/configs/hifag_a8_full_xattn.yaml`，
+   参数量 151.0K，pytest 11 项全绿 + 合成前向通过。
+   **待用户跑 seeds 42~46（将占用 exp_16~exp_20）**，与 A7 concat 配对比较。
 2. A4~A6 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
 3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
 

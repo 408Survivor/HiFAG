@@ -1,0 +1,81 @@
+# HiFAG A8: fine + coarse + audio with cross-attention fusion.
+# Purpose: close the gap to the AFGNN face_enhanced_focal baseline
+# (Test AUC 0.797 +/- 0.011). A7 (same branches, concat fusion) reached
+# 0.7756 +/- 0.0085; the baseline differs mainly by using cross-attention
+# fusion (fusion_hidden_dim 64), which this config adopts.
+# Face side = fine+coarse concat (192-dim) attended against audio (64-dim),
+# mirroring AFGNN's CrossModalAttentionFusion.
+
+data:
+  processed_dir: /data/ltq/DVlog/processed_official_features
+  num_frames: 32
+  audio_num_frames: 32
+
+model:
+  use_fine: true
+  use_coarse: true
+  use_audio: true
+
+  # Fine branch (AFGNN FaceGNN, mirrors afgnn_face_enhanced_focal.yaml)
+  face_in_channels: 13      # [x, y, dx, dy] + 9-dim region one-hot
+  face_hidden_channels: 128
+  face_out_channels: 128
+  face_num_layers: 3
+  face_heads: 4
+
+  # Coarse branch (RegionGNN)
+  coarse_in_channels: 10      # hand-crafted region descriptors (FEATURE_DIM)
+  coarse_hidden_channels: 64
+  coarse_out_channels: 64
+  coarse_num_layers: 2
+  coarse_heads: 4
+  coarse_edge_mode: "anatomical"   # "anatomical" | "full" (ablation A6)
+  coarse_normalize: true
+
+  # Audio branch (AFGNN AudioGNN, mirrors afgnn_face_enhanced_focal.yaml)
+  audio_in_channels: 25
+  audio_hidden_channels: 64
+  audio_out_channels: 64
+  audio_num_layers: 2
+  audio_heads: 4
+
+  # Fusion: cross-modal attention (face side = fine+coarse concat vs audio)
+  fusion_type: "cross_attention"   # "concat" | "cross_attention"
+  fusion_hidden_dim: 64
+
+  # Classification head
+  mlp_hidden: 128
+  dropout: 0.5
+
+  # Fine face graph structure
+  add_static_edges: true
+  add_temporal_edges: true
+  add_region_onehot: true
+  add_self_loops: true
+
+# Data augmentation disabled
+augmentation:
+  enabled: false
+
+training:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  patience: 15
+  lr: 0.001
+  weight_decay: 0.0001
+  checkpoint_path: experiments/checkpoints/hifag_a8_full_xattn_best.pt
+
+  early_stopping_metric: "auc"
+
+  # Loss: focal (SFAF best recipe; do NOT lower alpha below 0.25)
+  loss: "focal"
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+  scheduler:
+    type: "plateau"
+    factor: 0.5
+    patience: 5
+
+  grad_clip: 1.0
