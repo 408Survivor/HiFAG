@@ -85,8 +85,9 @@ A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045（配对 +0.
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_11**。
 
 1. A7 加音频（fine+coarse+audio，对齐 0.797 基线，验证粗图在完整模态下的增量）——已和用户商定优先做。
-   做法：复制 `hifag_a3_fine_coarse.yaml` 为 `hifag_a7_full.yaml`，改 `use_audio: true`，
-   音频分支超参对齐 AFGNN：audio_in_channels 25 / hidden 64 / out 64 / layers 2 / heads 4。
+   配置 `experiments/configs/hifag_a7_full.yaml` 已建好（2026-07-28）：A3 基础上 `use_audio: true`，
+   音频分支 25/64/64/2/4 对齐 AFGNN `face_enhanced_focal`，融合仍 concat。参数量 93.1K，
+   合成数据前向冒烟通过。**待用户跑 seeds 42~46（将占用 exp_11~exp_15）**。
 2. A4~A7 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
 3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
 
