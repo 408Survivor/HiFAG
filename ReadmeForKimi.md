@@ -79,18 +79,18 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-当前进度：**A2/A3/A7/A8 多 seed 均已完成**（exp_1~exp_20，seeds 42~46）。
+当前进度：**A2/A3/A7/A8/A9 多 seed 均已完成**（exp_1~exp_25，seeds 42~46）。
 A2 0.6599±0.0095；A3 0.6709±0.0045；A7(concat) 0.7756±0.0085；
-**A8(x-attn) 0.7863±0.0088 —— 与基线 0.797±0.011 基本追平（差 −0.011，在基线 1 std 内）**。
-A8−A7 配对 +0.0106，5/5 seeds 为正，t≈4.70（p<0.01），cross-attention 显著优于 concat。
-实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_21**。
+A8(x-attn) 0.7863±0.0088；A9(无粗分支) 0.7805±0.0123。
+**关键结论：A8−A9 配对均值仅 +0.0058（2/5 正，t≈0.85，不显著）——粗分支在完整模态下
+并联接入的增量有限，但显著提升稳定性（std 0.0088 vs 0.0123）。**
+实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_26**。
 
-1. **A9：fine+audio+xattn（去掉粗分支）**——隔离粗分支在完整模态下的增量。
-   这是当前最关键的消融：A8 只是追平基线，尚未证明粗图在完整模型里有正贡献。
-   做法：复制 `hifag_a8_full_xattn.yaml` 为 `hifag_a9_fine_audio_xattn.yaml`，改 `use_coarse: false`。
+1. **第二阶段：层级交互（fine↔coarse 消息传递）**——优先级已上调。
+   A9 证明并联增量小，层级交互是放大粗图贡献的关键路径。需先在 DESIGN.md
+   敲定方案（如 coarse→fine 门控、fine→coarse 汇聚、或双向），再动手。
 2. A4~A6 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
-3. 第二阶段：层级交互（fine↔coarse 消息传递）。若 A9 显示粗分支在完整模态下增量小，
-   层级交互是放大它的候选手段。
+   这些消融对论文仍有价值（解释粗图学到了什么），可穿插进行。
 
 ## SFAF 教训（不要重犯）
 
