@@ -16,6 +16,8 @@
 - 本机 DNS 把 github.com 解析到不可达的 20.205.x.x；已用 `~/.ssh/config` 把
   `github.com` 直连真实 IP `140.82.112.3:22`（免 sudo 绕过），SSH key 为
   `~/.ssh/id_ed25519`。git push/pull 直接可用；若失效，重测一个 140.82.x.x 可用 IP 替换。
+- 注意：shell 里 `LD_LIBRARY_PATH` 含 `~/miniconda3/lib` 会让 /usr/bin/ssh 加载 conda 的
+  libcrypto 报 "OpenSSL version mismatch"。push 失败时用 `LD_LIBRARY_PATH= git push ...`（2026-07-28 遇到）。
 - `gh` CLI 已装但未登录（网页 API 域名不通，暂不依赖它）。
 - 提交署名（repo 本地配置）：408Survivor / 408Survivor@users.noreply.github.com。
 
@@ -73,14 +75,14 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-当前进度：**exp_1（A2 粗图单独，seed 42）已完成**（test AUC 0.6728，详见 INDEX.md / PROGRESS.md）。
-实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_2**。
+当前进度：**A2/A3 多 seed 已完成**（exp_1~exp_10，seeds 42~46）。
+A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045（配对 +0.011，4/5 seeds 为正，p≈0.086）。
+**基线修正**：AFGNN 0.797±0.011 含音频（use_audio: true）；纯面部基线 `face_only_enhanced` 仅 0.657（单 seed）。
+实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_11**。
 
-1. 跑 A3（核心假设）：`python src/train.py --config experiments/configs/hifag_a3_fine_coarse.yaml --seed 42` → 将是 exp_2
-2. 评估：`python src/test.py --config <yaml> --checkpoint <exp_N>/best_seed42.pt --split test`
-3. 多 seed（42~46）。对照基线：AFGNN `face_enhanced_focal` Test AUC **0.797 ± 0.011**（5 seeds，划分一致）。
-4. 视结果做 A4~A7 消融（对称性/运动特征、边拓扑、音频）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
-5. 第二阶段：层级交互（fine↔coarse 消息传递），A3 有增量才做。
+1. A7 加音频（fine+coarse+audio，对齐 0.797 基线，验证粗图在完整模态下的增量）——已和用户商定优先做。
+2. A4~A7 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
+3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
 
 ## SFAF 教训（不要重犯）
 
