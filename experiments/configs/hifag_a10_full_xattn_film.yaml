@@ -1,0 +1,84 @@
+# HiFAG A10: A8 (fine+coarse+audio, cross-attention fusion) + stage-2
+# hierarchical interaction: coarse->fine FiLM input modulation.
+# Purpose: A9 showed the coarse branch's parallel (concat/x-attn) increment is
+# small and non-significant (+0.0058, t~0.85). FiLM makes the coarse graph
+# modulate the fine branch's geometric input instead — the key test of
+# whether hierarchical structure amplifies the coarse contribution.
+# FiLM layers are zero-initialized: training starts from the unmodulated A8.
+
+data:
+  processed_dir: /data/ltq/DVlog/processed_official_features
+  num_frames: 32
+  audio_num_frames: 32
+
+model:
+  use_fine: true
+  use_coarse: true
+  use_audio: true
+
+  # Fine branch (AFGNN FaceGNN, mirrors afgnn_face_enhanced_focal.yaml)
+  face_in_channels: 13      # [x, y, dx, dy] + 9-dim region one-hot
+  face_hidden_channels: 128
+  face_out_channels: 128
+  face_num_layers: 3
+  face_heads: 4
+
+  # Coarse branch (RegionGNN)
+  coarse_in_channels: 10      # hand-crafted region descriptors (FEATURE_DIM)
+  coarse_hidden_channels: 64
+  coarse_out_channels: 64
+  coarse_num_layers: 2
+  coarse_heads: 4
+  coarse_edge_mode: "anatomical"   # "anatomical" | "full" (ablation A6)
+  coarse_normalize: true
+
+  # Audio branch (AFGNN AudioGNN, mirrors afgnn_face_enhanced_focal.yaml)
+  audio_in_channels: 25
+  audio_hidden_channels: 64
+  audio_out_channels: 64
+  audio_num_layers: 2
+  audio_heads: 4
+
+  # Fusion: cross-modal attention (face side = fine+coarse concat vs audio)
+  fusion_type: "cross_attention"
+  fusion_hidden_dim: 64
+
+  # Stage-2 hierarchical interaction (the only change vs A8)
+  hierarchical: "coarse_to_fine_film"   # "none" | "coarse_to_fine_film"
+
+  # Classification head
+  mlp_hidden: 128
+  dropout: 0.5
+
+  # Fine face graph structure
+  add_static_edges: true
+  add_temporal_edges: true
+  add_region_onehot: true
+  add_self_loops: true
+
+# Data augmentation disabled
+augmentation:
+  enabled: false
+
+training:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  patience: 15
+  lr: 0.001
+  weight_decay: 0.0001
+  checkpoint_path: experiments/checkpoints/hifag_a10_full_xattn_film_best.pt
+
+  early_stopping_metric: "auc"
+
+  # Loss: focal (SFAF best recipe; do NOT lower alpha below 0.25)
+  loss: "focal"
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+  scheduler:
+    type: "plateau"
+    factor: 0.5
+    patience: 5
+
+  grad_clip: 1.0

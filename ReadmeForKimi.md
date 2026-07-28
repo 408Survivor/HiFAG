@@ -87,8 +87,12 @@ A8(x-attn) 0.7863±0.0088；A9(无粗分支) 0.7805±0.0123。
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_26**。
 
 1. **第二阶段：层级交互（fine↔coarse 消息传递）**——优先级已上调。
-   A9 证明并联增量小，层级交互是放大粗图贡献的关键路径。需先在 DESIGN.md
-   敲定方案（如 coarse→fine 门控、fine→coarse 汇聚、或双向），再动手。
+   A9 证明并联增量小，层级交互是放大粗图贡献的关键路径。方案已敲定并写入
+   DESIGN.md 3.5（coarse→fine FiLM，2026-07-28）；**代码已实现**：RegionGNN 加
+   `return_nodes`，HiFAG 加 `hierarchical` 开关（zero-init FiLM，参数 +520），
+   配置 `experiments/configs/hifag_a10_full_xattn_film.yaml`（= A8 + film）。
+   pytest 14 项全绿（含 zero-init 等价性、autograd 安全性用例）。
+   **待用户跑 seeds 42~46（将占用 exp_26~exp_30）**，与 A8 配对比较。
 2. A4~A6 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
    这些消融对论文仍有价值（解释粗图学到了什么），可穿插进行。
 

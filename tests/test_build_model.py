@@ -173,6 +173,60 @@ def test_cross_attention_requires_audio_and_face(data_dir):
         build_model(cfg)
 
 
+def test_model_forward_coarse_to_fine_film(data_dir):
+    """A10: coarse per-node embeddings FiLM-modulate the fine input."""
+    cfg = _base_cfg(
+        data_dir,
+        use_audio=True,
+        fusion_type="cross_attention",
+        hierarchical="coarse_to_fine_film",
+    )
+    loaders = build_loaders(cfg, augment=False)
+    model = build_model(cfg)
+    model.eval()
+
+    batch = next(iter(loaders["valid"]))
+    with torch.no_grad():
+        logit = model(batch)
+    assert logit.shape == (BATCH_SIZE, 1)
+    assert torch.isfinite(logit).all()
+
+
+def test_film_zero_init_matches_unmodulated(data_dir):
+    """Zero-init FiLM must start exactly at the unmodulated model's output."""
+    cfg_none = _base_cfg(data_dir, hierarchical="none")
+    cfg_film = _base_cfg(data_dir, hierarchical="coarse_to_fine_film")
+    loaders = build_loaders(cfg_none, augment=False)
+
+    model_none = build_model(cfg_none)
+    model_film = build_model(cfg_film)
+    # Align shared weights; film layers stay zero-initialized.
+    model_film.load_state_dict(model_none.state_dict(), strict=False)
+    model_none.eval()
+    model_film.eval()
+
+    batch = next(iter(loaders["valid"]))
+    with torch.no_grad():
+        out_none = model_none(batch)
+        out_film = model_film(batch)
+    assert torch.allclose(out_none, out_film, atol=1e-6)
+
+
+def test_film_requires_fine_and_coarse(data_dir):
+    """coarse_to_fine_film without both face branches must raise."""
+    cfg = _base_cfg(
+        data_dir, use_coarse=False, hierarchical="coarse_to_fine_film"
+    )
+    with pytest.raises(ValueError, match="coarse_to_fine_film"):
+        build_model(cfg)
+
+    cfg = _base_cfg(
+        data_dir, use_fine=False, hierarchical="coarse_to_fine_film"
+    )
+    with pytest.raises(ValueError, match="coarse_to_fine_film"):
+        build_model(cfg)
+
+
 def test_feature_contract_coarse_dim(data_dir):
     """Wrong coarse feature dim must raise, never silently truncate."""
     cfg = _base_cfg(data_dir, use_fine=False, use_coarse=True)

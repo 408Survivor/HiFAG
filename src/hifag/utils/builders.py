@@ -57,6 +57,8 @@ def build_model(cfg: dict, device=None):
         # Fusion
         fusion_type=m.get("fusion_type", "concat"),
         fusion_hidden_dim=m.get("fusion_hidden_dim", 64),
+        # Hierarchical interaction (stage 2)
+        hierarchical=m.get("hierarchical", "none"),
     )
 
     if device is not None:

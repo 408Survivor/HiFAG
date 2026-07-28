@@ -210,14 +210,19 @@ class RegionGNN(nn.Module):
         batched = base + offsets
         return batched.permute(1, 0, 2).reshape(2, -1)
 
-    def forward(self, x: torch.Tensor, batch: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, batch: torch.Tensor, return_nodes: bool = False
+    ) -> torch.Tensor:
         """
         Args:
             x: coarse node features, (num_graphs * 9 * T, in_channels).
             batch: batch vector assigning coarse nodes to graphs.
+            return_nodes: if True, also return the per-node embeddings from
+                before the readout (used by the coarse->fine FiLM modulation).
 
         Returns:
             graph_embedding: (num_graphs, out_channels).
+            node_embeddings (only if return_nodes): (num_nodes, out_channels).
         """
         # Feature contract: fail loudly instead of silently truncating
         # (SFAF region one-hot lesson).
@@ -242,4 +247,7 @@ class RegionGNN(nn.Module):
             else:
                 x = conv(x, edge_index)
 
-        return self.readout(x, batch)  # (num_graphs, out_channels)
+        graph_emb = self.readout(x, batch)  # (num_graphs, out_channels)
+        if return_nodes:
+            return graph_emb, x
+        return graph_emb

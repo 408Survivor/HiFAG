@@ -7,9 +7,13 @@ Combines up to three branches with per-branch config switches:
 
 Stage-1 fusion is plain concat -> MLP by default; setting
 `fusion_type="cross_attention"` fuses the face side (fine+coarse concat) with
-the audio embedding via AFGNN's CrossModalAttentionFusion instead
-(hierarchical fine<->coarse message passing is stage 2 and intentionally not
-implemented here).
+the audio embedding via AFGNN's CrossModalAttentionFusion instead.
+
+Stage-2 hierarchical interaction (DESIGN.md 3.5): with
+`hierarchical="coarse_to_fine_film"`, the coarse branch runs first and its
+per-node embeddings FiLM-modulate the fine branch's geometric input features
+([x, y, dx, dy]; the region one-hot is left untouched). The FiLM layers are
+zero-initialized so training starts from the unmodulated model.
 
 Follows the AFGNN model interface: forward(data) -> (batch_size, 1) logit, so
 AFGNN's trainer (train_model / evaluate) works unchanged.
@@ -22,8 +26,19 @@ from models.audio_gnn import AudioGNN
 from models.face_gnn import FaceGNN
 from models.fusion import CrossModalAttentionFusion
 
-from hifag.data.region_features import FEATURE_DIM, NUM_REGIONS
+from hifag.data.region_features import FEATURE_DIM, NUM_REGIONS, REGION_GROUPS
 from hifag.models.region_gnn import RegionGNN
+
+NUM_LANDMARKS = 68
+HIERARCHICAL_MODES = ("none", "coarse_to_fine_film")
+
+
+def build_landmark_region_index() -> torch.Tensor:
+    """(68,) long tensor mapping each landmark to its region id (0..8)."""
+    index = torch.empty(NUM_LANDMARKS, dtype=torch.long)
+    for region_id, indices in enumerate(REGION_GROUPS.values()):
+        index[torch.tensor(indices, dtype=torch.long)] = region_id
+    return index
 
 
 class HiFAG(nn.Module):
@@ -43,6 +58,9 @@ class HiFAG(nn.Module):
         fusion_type: "concat" (default) or "cross_attention" (face side vs
             audio, requires use_audio and at least one face branch).
         fusion_hidden_dim: attention hidden dim for cross_attention fusion.
+        hierarchical: "none" (default) or "coarse_to_fine_film" (stage 2:
+            coarse per-node embeddings FiLM-modulate the fine geometric
+            input; requires use_fine and use_coarse).
     """
 
     def __init__(
@@ -79,6 +97,8 @@ class HiFAG(nn.Module):
         # Fusion
         fusion_type: str = "concat",
         fusion_hidden_dim: int = 64,
+        # Hierarchical interaction (stage 2)
+        hierarchical: str = "none",
     ):
         super().__init__()
         if not (use_fine or use_coarse or use_audio):
@@ -159,6 +179,36 @@ class HiFAG(nn.Module):
             raise ValueError(f"Unsupported fusion type: {fusion_type}")
         self.fusion_type = fusion_type
 
+        # Stage-2 hierarchical interaction: coarse per-node embeddings
+        # FiLM-modulate the fine branch's geometric input [x, y, dx, dy].
+        # Zero-initialized -> training starts from the unmodulated model.
+        if hierarchical not in HIERARCHICAL_MODES:
+            raise ValueError(
+                f"Unsupported hierarchical mode: {hierarchical}. "
+                f"Choose from {HIERARCHICAL_MODES}"
+            )
+        if hierarchical == "coarse_to_fine_film":
+            if not (use_fine and use_coarse):
+                raise ValueError(
+                    "hierarchical='coarse_to_fine_film' requires "
+                    "use_fine=True and use_coarse=True."
+                )
+            self.film_gamma = nn.Linear(coarse_out_channels, 4)
+            self.film_beta = nn.Linear(coarse_out_channels, 4)
+            nn.init.zeros_(self.film_gamma.weight)
+            nn.init.zeros_(self.film_gamma.bias)
+            nn.init.zeros_(self.film_beta.weight)
+            nn.init.zeros_(self.film_beta.bias)
+            self.register_buffer(
+                "landmark_region",
+                build_landmark_region_index(),
+                persistent=False,
+            )
+        else:
+            self.film_gamma = None
+            self.film_beta = None
+        self.hierarchical = hierarchical
+
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in, mlp_hidden),
             nn.ReLU(),
@@ -183,6 +233,32 @@ class HiFAG(nn.Module):
             .repeat_interleave(self.coarse_nodes_per_graph)
         )
 
+    def _film_modulate(
+        self, x: torch.Tensor, batch: torch.Tensor, coarse_nodes: torch.Tensor
+    ) -> torch.Tensor:
+        """FiLM-modulate the fine geometric input [x, y, dx, dy] with the
+        coarse node embedding of the node's own region at the same frame.
+
+        Fine nodes are frame-major (t * 68 + landmark); coarse nodes are
+        frame-major (t * 9 + region). The landmark->region map is a fixed
+        buffer; the modulation only touches the first 4 feature dims.
+        """
+        counts = torch.bincount(batch)
+        ptr = torch.cat([counts.new_zeros(1), counts.cumsum(0)])
+        within = torch.arange(batch.size(0), device=x.device) - ptr[batch]
+        t = within // NUM_LANDMARKS
+        landmark = within % NUM_LANDMARKS
+        region = self.landmark_region[landmark]
+        coarse_index = (
+            batch * self.coarse_nodes_per_graph + t * NUM_REGIONS + region
+        )
+        h_c = coarse_nodes[coarse_index]  # (N, coarse_out_channels)
+        gamma = self.film_gamma(h_c)
+        beta = self.film_beta(h_c)
+        # No in-place writes: autograd-safe modulation of the geometric dims.
+        geo = x[:, :4] * (1.0 + gamma) + beta
+        return torch.cat([geo, x[:, 4:]], dim=-1)
+
     def forward(self, data):
         """
         Args:
@@ -194,23 +270,14 @@ class HiFAG(nn.Module):
             logit: shape (batch_size, 1).
         """
         embeddings = []
+        # Branch outputs are stored by name and concatenated in the fixed
+        # order [fine, coarse, audio], regardless of execution order (the
+        # coarse branch must run first when FiLM modulation is active).
+        branch_embs = {}
 
-        if self.use_fine:
-            x = data.x
-            # Feature contract: fail loudly on dim mismatch (SFAF lesson).
-            assert x.size(-1) == self.face_in_channels, (
-                f"Fine node feature dim mismatch: expected {self.face_in_channels}, "
-                f"got {x.size(-1)}"
-            )
-            h_fine = self.face_gnn(
-                x,
-                data.edge_index,
-                data.batch,
-                edge_weight=getattr(data, "edge_weight", None),
-                edge_type=getattr(data, "edge_type", None),
-            )
-            embeddings.append(h_fine)
-
+        # Coarse branch runs first: with coarse_to_fine_film its per-node
+        # embeddings are needed to modulate the fine input.
+        coarse_nodes = None
         if self.use_coarse:
             coarse_x = getattr(data, "coarse_x", None)
             if coarse_x is None:
@@ -223,8 +290,31 @@ class HiFAG(nn.Module):
                 f"{self.coarse_in_channels}, got {coarse_x.size(-1)}"
             )
             coarse_batch = self._coarse_batch(coarse_x, coarse_x.device)
-            h_coarse = self.region_gnn(coarse_x, coarse_batch)
-            embeddings.append(h_coarse)
+            if self.hierarchical == "coarse_to_fine_film":
+                h_coarse, coarse_nodes = self.region_gnn(
+                    coarse_x, coarse_batch, return_nodes=True
+                )
+            else:
+                h_coarse = self.region_gnn(coarse_x, coarse_batch)
+            branch_embs["coarse"] = h_coarse
+
+        if self.use_fine:
+            x = data.x
+            # Feature contract: fail loudly on dim mismatch (SFAF lesson).
+            assert x.size(-1) == self.face_in_channels, (
+                f"Fine node feature dim mismatch: expected {self.face_in_channels}, "
+                f"got {x.size(-1)}"
+            )
+            if coarse_nodes is not None:
+                x = self._film_modulate(x, data.batch, coarse_nodes)
+            h_fine = self.face_gnn(
+                x,
+                data.edge_index,
+                data.batch,
+                edge_weight=getattr(data, "edge_weight", None),
+                edge_type=getattr(data, "edge_type", None),
+            )
+            branch_embs["fine"] = h_fine
 
         if self.use_audio:
             audio_x = getattr(data, "audio_x", None)
@@ -252,6 +342,11 @@ class HiFAG(nn.Module):
                     ).repeat_interleave(num_frames)
                     audio_batch = audio_batch[:num_audio_nodes]
                 h_audio = self.audio_gnn(audio_x, batch=audio_batch)
+
+        # Fixed concat order: [fine, coarse, audio].
+        for name in ("fine", "coarse"):
+            if name in branch_embs:
+                embeddings.append(branch_embs[name])
 
         if self.fusion is not None:
             # Face side = fine+coarse concat; attend face<->audio, then concat.
