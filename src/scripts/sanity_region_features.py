@@ -29,6 +29,7 @@ from hifag.data.region_features import (
     FEATURE_NAMES,
     REGION_NAMES,
     compute_region_features,
+    flat_to_coords,
 )
 
 
@@ -135,7 +136,8 @@ def main():
     X = np.zeros((len(visual), len(agg_names)), dtype=np.float32)
     for i, seq in enumerate(visual):
         sampled = sample_frames(seq, args.num_frames)
-        coords = sampled.reshape(args.num_frames, 68, 2)
+        # OpenFace layout is [x_0..x_67, y_0..y_67]; do NOT reshape(68, 2).
+        coords = flat_to_coords(sampled)
         feats = compute_region_features(coords)  # (T, 9, 10)
         X[i] = aggregate_sample(feats)
         if (i + 1) % 200 == 0:

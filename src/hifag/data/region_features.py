@@ -89,6 +89,28 @@ def feature_dim(drop_groups=()) -> int:
     return len(kept_feature_indices(drop_groups))
 
 
+def flat_to_coords(seq: np.ndarray) -> np.ndarray:
+    """Convert a raw D-Vlog visual sequence to true (x, y) landmark coords.
+
+    D-Vlog official features (OpenFace convention) store each frame's 136
+    values as [x_0..x_67, y_0..y_67] — x-block followed by y-block, NOT
+    interleaved (x, y) pairs. AFGNN's reshape(T, 68, 2) reads them as
+    interleaved, which mis-pairs coordinates (bug found 2026-07-28 via the
+    region-effect face map). HiFAG-side code must use this helper instead.
+
+    Args:
+        seq: (T, 136) raw landmark sequence.
+
+    Returns:
+        coords: (T, 68, 2) with [..., 0]=x, [..., 1]=y.
+    """
+    seq = np.asarray(seq)
+    assert seq.ndim == 2 and seq.shape[1] == 136, (
+        f"Expected (T, 136) OpenFace-layout sequence, got {seq.shape}"
+    )
+    return np.stack([seq[:, :68], seq[:, 68:]], axis=-1)
+
+
 def compute_velocity(coords: np.ndarray) -> np.ndarray:
     """First-order temporal difference, zero-padded at the first frame.
 

@@ -167,6 +167,27 @@
   为主，本质上是**样本级全局属性**而非逐帧调制信号，帧级 FiLM 用错了粒度。
 - 明细：`experiments/exp_26/` ~ `experiments/exp_30/`；汇总表见 `experiments/INDEX.md`。
 
+### ⚠️ 坐标布局 bug 发现与修复（2026-07-28，影响全局）
+
+- **发现**：绘制区域可解释性图时脸部区域着色图畸形，追查确认 D-Vlog 官方特征
+  （OpenFace 输出）的 136 维布局是 `[x_0..x_67, y_0..y_67]`（先全 x 后全 y），
+  而 AFGNN `build_face_graph` 与 HiFAG 全链路按 `(x,y)` 交错 `reshape(68,2)` 误读——
+  **exp_1~exp_30 及 AFGNN 基线全部用错配坐标训练**（边/one-hot 按索引构建，不受影响）。
+- **为何结果没崩**：错配后每节点持相邻存储位的两个 x 或两个 y，仍含相关几何信息；
+  最强 sanity 信号（inner_mouth.spread）幸存是因为错配下该区域恰好仍装嘴部 y 坐标。
+- **修复**（HiFAG 侧，AFGNN 保持只读）：`region_features.flat_to_coords` 统一转换；
+  `HiFAGFaceDataset._repair_node_coords` 从 data.x 逆向还原正确配对并重算速度列
+  （默认开启，`fix_coordinate_layout: false` 可复现旧行为）；sanity 脚本同步修复。
+  新增 2 个单元测试（布局还原、数据集修复后 data.x == 真实坐标），pytest 18 项全绿。
+- **修复后 sanity 重跑**（961 样本）：111/180 特征 p<0.05；最强变为
+  `std(outer_mouth.area)` d=−0.672, p=2.6e-26（外唇**面积**波动——修复前多边形面积
+  在错配坐标下无意义，修复后语义才真正成立）；模式不变：top 全为时序 std、抑郁组更低。
+  旧报告备份：`experiments/results/sanity_region_features_pre_coord_fix.json`。
+- **可解释性图**：`experiments/results/region_depression_effect.png`
+  （区域×描述子 Cohen's d 热图 + 面部区域着色图，脚本 `src/scripts/plot_region_effects.py`）。
+- **重跑计划**：A2/A8/A9 × 5 seeds（exp_31~45），A4~A6 顺延（exp_46~60）。
+  注意 AFGNN 基线 0.797 是修复前坐标训练的，修复后数字与之不完全可比。
+
 ---
 
 ## 当前阻塞 / 风险

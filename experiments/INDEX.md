@@ -7,6 +7,12 @@
 
 ## 编号规则
 
+> ⚠️ **坐标布局修复（2026-07-28）**：D-Vlog 特征是 OpenFace 布局
+> `[x_0..x_67, y_0..y_67]`，此前全链路按 `(x,y)` 交错 `reshape(68,2)` 误读。
+> HiFAG 侧已修复（`HiFAGFaceDataset.fix_coordinate_layout`，默认开启）。
+> **exp_1~exp_30 全部为修复前结果**；修复后重跑从 exp_31 开始，
+> 配置同名（修复在数据集代码里，yaml 不变）。
+
 - 一次 `train.py` 运行 = 一个 exp_N（含单 seed）；多 seed 就是连续多个 exp_N。
 - exp_N 目录内容：`config.yaml`、`model_summary.txt`、`run_info.txt`、
   `best_seed{N}.pt`、`training_history_seed{N}.json`、`test_{split}_results.json`。
@@ -48,9 +54,9 @@
 | 28 | hifag_a10_full_xattn_film | 44 | A10 多 seed | 0.7875 (ep10) | 0.7861 | ✅ 完成；早停 ep25 |
 | 29 | hifag_a10_full_xattn_film | 45 | A10 多 seed | 0.7953 (ep2) | 0.7818 | ✅ 完成；早停 ep17 |
 | 30 | hifag_a10_full_xattn_film | 46 | A10 多 seed | 0.8082 (ep1) | 0.7900 | ✅ 完成；早停 ep16；best 在 ep1 |
-| 31~35 | hifag_a4_coarse_nosym | 42~46 | A4 去对称性特征 | — | — | ⏳ 待跑（预登记） |
-| 36~40 | hifag_a5_coarse_geom | 42~46 | A5 只留几何特征 | — | — | ⏳ 待跑（预登记） |
-| 41~45 | hifag_a6_coarse_full_edges | 42~46 | A6 全连接边 | — | — | ⏳ 待跑（预登记） |
+| 31~35 | hifag_a2_coarse_only | 42~46 | **坐标修复后重跑 A2** | — | — | ⏳ 待跑（预登记） |
+| 36~40 | hifag_a8_full_xattn | 42~46 | **坐标修复后重跑 A8** | — | — | ⏳ 待跑（预登记） |
+| 41~45 | hifag_a9_fine_audio_xattn | 42~46 | **坐标修复后重跑 A9** | — | — | ⏳ 待跑（预登记） |
 
 ## 多 seed 汇总（seeds 42~46，2026-07-28）
 
@@ -91,7 +97,24 @@
   （A8 std 0.0088 / A10 std 0.0066 vs A9 std 0.0123）。均值增量路径均未奏效
   （并联 +0.0058 n.s.；FiLM −0.0039 n.s.）。
 
-## A4~A6 消融计划（预登记 2026-07-28，exp_31~exp_45）
+## 坐标修复后重跑计划（预登记 2026-07-28，exp_31~exp_45）
+
+修复坐标布局后重跑三组关键实验，与修复前同名配置对比（配置不变，
+修复在数据集代码里默认开启）：
+
+| exp | 配置 | 对比目的 |
+|-----|------|---------|
+| 31~35 | hifag_a2_coarse_only | 修复后粗图单独判别力（vs 修复前 0.6599±0.0095） |
+| 36~40 | hifag_a8_full_xattn | 修复后最佳模型（vs 修复前 0.7863±0.0088） |
+| 41~45 | hifag_a9_fine_audio_xattn | 修复后粗图净增量配对比较（vs A8 修复后） |
+
+注意：AFGNN 基线 0.797 也是修复前坐标训练的，修复后的 A8/A9 与之
+不完全可比；A8−A9 的配对比较在 HiFAG 内部仍然干净。
+
+## A4~A6 消融计划（预登记 2026-07-28；**已被坐标修复计划取代，见上节**）
+
+> ⚠️ 2026-07-28 发现坐标布局 bug（见 PROGRESS.md）：A4~A6 的粗描述子语义
+> 在修复前不可信，消融顺延到关键实验重跑之后，预计占用 exp_46~exp_60。
 
 均以 A2 coarse-only（0.6599 ± 0.0095）为基底，seeds 42~46，归因最干净。
 跑完后做的配对比较（同 seed 配对 t 检验）：

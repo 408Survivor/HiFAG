@@ -79,28 +79,19 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-当前进度：**A2/A3/A7/A8/A9/A10 多 seed 均已完成**（exp_1~exp_30，seeds 42~46）。
-A2 0.6599±0.0095；A3 0.6709±0.0045；A7(concat) 0.7756±0.0085；
-A8(x-attn) 0.7863±0.0088；A9(无粗) 0.7805±0.0123；A10(FiLM) 0.7824±0.0066。
-**关键结论：粗分支均值增量两条路均未奏效——并联 +0.0058（n.s.）、FiLM −0.0039（n.s.）；
-但粗图持续带来稳定性收益（A8/A10 std 0.0088/0.0066 vs A9 0.0123）。**
-当前最佳配置仍是 **A8**（0.7863±0.0088，与基线 0.797±0.011 在 1 std 内）。
+当前进度：**⚠️ 2026-07-28 发现坐标布局 bug 并已修复（HiFAG 侧）**。
+D-Vlog 特征是 OpenFace 布局 `[x_0..x_67, y_0..y_67]`，此前按交错 `reshape(68,2)` 误读；
+**exp_1~exp_30 及 AFGNN 基线均为修复前结果**。修复点：`flat_to_coords` +
+`HiFAGFaceDataset._repair_node_coords`（默认开启，yaml 不变）。
+修复后 sanity 结论成立且语义更干净（最强 `std(outer_mouth.area)` d=−0.672）。
+可解释性图已产出：`experiments/results/region_depression_effect.png`。
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_31**。
 
-待讨论后择路（下个会话先和用户定方向）：
-1. **A4~A6 消融**（对称性/运动特征、边拓扑）——解释粗图学到了什么，服务论文叙事。
-   **代码已实现（2026-07-28）**：`compute_region_features` 加 `drop_groups` 开关
-   （geometry/motion/symmetry 三组，整组删维度），数据集/归一化统计/builders 全链路透传。
-   配置（均以 A2 coarse-only 为基底，归因最干净）：
-   - `hifag_a4_coarse_nosym.yaml`（去对称性，8 维）
-   - `hifag_a5_coarse_geom.yaml`（只留几何，4 维）
-   - `hifag_a6_coarse_full_edges.yaml`（全连接边）
-   pytest 16 项全绿，三配置冒烟通过。**待用户跑，占用 exp_31~exp_45**。
-2. 粗图信号的**粒度问题**：sanity 显示主信号是时序 std（样本级全局属性），
-   帧级调制/逐帧图传播可能天然不匹配——可考虑样本级注入（粗图 embedding
-   直接进融合层已有；或粗统计量绕过 GNN 直接 concat）。
-3. 接受粗图定位 = 稳定性 + 可解释性组件，转向论文写作素材整理
-   （sanity 统计 + A2/A8/A9/A10 对照表已齐）。
+1. **重跑关键实验（已和用户商定）**：A2/A8/A9 × seeds 42~46（exp_31~45），
+   与修复前结果对比，评估坐标修复的影响幅度。
+2. A4~A6 消融（配置已就绪，顺延至 exp_46~60）——修复后描述子语义才可信。
+3. 后续按重跑结果定：若修复后 A8−A9 增量变大，粗图叙事翻身；
+   可解释性素材（区域效应图 + sanity）已可直接进论文。
 
 ## SFAF 教训（不要重犯）
 

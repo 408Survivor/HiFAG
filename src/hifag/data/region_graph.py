@@ -28,6 +28,7 @@ from hifag.data.region_features import (
     NUM_REGIONS,
     compute_region_features,
     feature_dim,
+    flat_to_coords,
 )
 
 
@@ -48,7 +49,8 @@ def compute_coarse_norm_stats(
     feats = []
     for seq in visual:
         sampled = sample_frames(seq, num_frames)
-        coords = sampled.reshape(num_frames, 68, 2)
+        # OpenFace layout is [x_0..x_67, y_0..y_67]; do NOT reshape(68, 2).
+        coords = flat_to_coords(sampled)
         feats.append(compute_region_features(coords, drop_groups=drop_groups))
     feats = np.stack(feats, axis=0)  # (N, T, NUM_REGIONS, FEATURE_DIM)
     mean = feats.mean(axis=(0, 1, 2))
@@ -70,6 +72,9 @@ class HiFAGFaceDataset(DVlogFaceDataset):
             when coarse_normalize is True.
         coarse_drop_groups: feature groups to drop (ablations A4/A5);
             must match the stats and the model's coarse_in_channels.
+        fix_coordinate_layout: re-pair node features from the mis-read
+            interleaved layout to true (x, y) pairs (see __getitem__).
+            Default True; only disable to reproduce pre-fix experiments.
     """
 
     def __init__(
@@ -79,6 +84,7 @@ class HiFAGFaceDataset(DVlogFaceDataset):
         coarse_norm_mean: np.ndarray = None,
         coarse_norm_std: np.ndarray = None,
         coarse_drop_groups=(),
+        fix_coordinate_layout: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -91,17 +97,59 @@ class HiFAGFaceDataset(DVlogFaceDataset):
         self.coarse_norm_std = coarse_norm_std
         self.coarse_drop_groups = tuple(coarse_drop_groups)
         self.coarse_dim = feature_dim(self.coarse_drop_groups)
+        self.fix_coordinate_layout = fix_coordinate_layout
+
+    def _repair_node_coords(self, x: torch.Tensor) -> torch.Tensor:
+        """Re-pair mis-read node coordinates into true (x, y) pairs.
+
+        D-Vlog official features store each frame as [x_0..x_67, y_0..y_67]
+        (OpenFace convention), but AFGNN's build_face_graph reads them with
+        reshape(T, 68, 2), i.e. as interleaved pairs. As a result every
+        fine node holds flat[2i] and flat[2i+1] — two x's or two y's of
+        adjacent storage slots, not a true (x, y) coordinate (bug found
+        2026-07-28). The full flat vector is recoverable from x[:, :2] by
+        re-interleaving; true coords are then (flat[:68], flat[68:]).
+
+        Velocity columns (dx, dy) are recomputed from the true coords; any
+        remaining columns (region one-hot) are passed through untouched.
+        NOTE: AFGNN's augmentation (when enabled) was applied to the
+        mis-paired coords upstream and cannot be undone here — all HiFAG
+        configs currently disable augmentation.
+        """
+        T = self.num_frames
+        a = x[:, 0].reshape(T, 68).numpy()
+        b = x[:, 1].reshape(T, 68).numpy()
+        flat = np.empty((T, 136), dtype=np.float64)
+        flat[:, 0::2] = a
+        flat[:, 1::2] = b
+        coords = np.stack([flat[:, :68], flat[:, 68:]], axis=-1)  # (T, 68, 2)
+
+        cols = [coords]
+        n_skip = 2
+        if x.size(1) >= 4:  # [x, y, dx, dy, ...] -> recompute velocity
+            velocity = np.zeros_like(coords)
+            if T > 1:
+                velocity[1:] = coords[1:] - coords[:-1]
+            cols.append(velocity)
+            n_skip = 4
+        if x.size(1) > n_skip:  # region one-hot etc.
+            cols.append(x[:, n_skip:].numpy().reshape(T, 68, -1))
+        fixed = np.concatenate(cols, axis=-1).reshape(T * 68, -1)
+        return torch.from_numpy(fixed).float()
 
     def __getitem__(self, idx):
         data = super().__getitem__(idx)
 
         # data.x layout: [x, y, (dx, dy), (region one-hot...)] per landmark,
-        # frame-major (node = t * 68 + landmark_id). The first two dims are
-        # always the (augmented, sampled) coordinates.
+        # frame-major (node = t * 68 + landmark_id) — but with the mis-paired
+        # coordinates described in _repair_node_coords.
         num_nodes = self.num_frames * 68
         assert data.x.size(0) == num_nodes, (
             f"Expected {num_nodes} fine nodes, got {data.x.size(0)}"
         )
+        if self.fix_coordinate_layout:
+            data.x = self._repair_node_coords(data.x)
+
         coords = data.x[:, 0:2].numpy().reshape(self.num_frames, 68, 2)
 
         feats = compute_region_features(coords, drop_groups=self.coarse_drop_groups)
@@ -148,6 +196,7 @@ def get_hifag_loaders(
     use_audio: bool = True,
     coarse_normalize: bool = True,
     coarse_drop_groups=(),
+    fix_coordinate_layout: bool = True,
     worker_init_fn=None,
 ):
     """Build train/valid/test DataLoaders with coarse region graphs attached.
@@ -217,6 +266,7 @@ def get_hifag_loaders(
             coarse_norm_mean=coarse_mean,
             coarse_norm_std=coarse_std,
             coarse_drop_groups=coarse_drop_groups,
+            fix_coordinate_layout=fix_coordinate_layout,
         )
 
         loaders[split] = DataLoader(

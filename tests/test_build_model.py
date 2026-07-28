@@ -17,7 +17,12 @@ sys.path.insert(
 )
 import hifag.paths  # noqa: F401, E402
 
-from hifag.data.region_features import FEATURE_DIM, NUM_REGIONS, compute_region_features
+from hifag.data.region_features import (
+    FEATURE_DIM,
+    NUM_REGIONS,
+    compute_region_features,
+    flat_to_coords,
+)
 from hifag.utils.builders import build_loaders, build_model
 
 NUM_FRAMES = 8
@@ -107,6 +112,32 @@ def test_region_features_drop_groups():
 
     with pytest.raises(ValueError, match="Unknown feature groups"):
         compute_region_features(coords, drop_groups=["bogus"])
+
+
+def test_flat_to_coords_recovers_openface_layout():
+    """136-dim frames are [x_0..x_67, y_0..y_67], not interleaved pairs."""
+    rng = np.random.default_rng(3)
+    x = rng.standard_normal(68)
+    y = rng.standard_normal(68) + 5.0
+    seq = np.concatenate([x, y])[None, :].repeat(3, axis=0)  # (3, 136)
+    coords = flat_to_coords(seq)
+    assert coords.shape == (3, 68, 2)
+    assert np.array_equal(coords[0, :, 0], x)
+    assert np.array_equal(coords[0, :, 1], y)
+
+
+def test_dataset_repairs_coordinate_layout(data_dir):
+    """data.x[:, :2] must equal true (x, y) from the raw OpenFace-layout npy."""
+    cfg = _base_cfg(data_dir)
+    loaders = build_loaders(cfg, augment=False)
+    dataset = loaders["valid"].dataset
+    data = dataset[0]
+
+    visual = np.load(os.path.join(data_dir, "valid_visual.npy"))
+    idx = np.linspace(0, visual.shape[1] - 1, NUM_FRAMES, dtype=int)
+    expected = flat_to_coords(visual[0][idx])  # (T, 68, 2)
+    got = data.x[:, :2].numpy().reshape(NUM_FRAMES, 68, 2)
+    assert np.allclose(got, expected, atol=1e-5)
 
 
 def test_loaders_attach_coarse(data_dir):
