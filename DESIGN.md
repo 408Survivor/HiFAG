@@ -98,11 +98,34 @@ landmark 序列 (T, 68, 2)
 
 直接复用 AFGNN FaceGNN（含 region one-hot 13 维输入），通过 `paths.py` 导入，不复制代码。
 
-### 3.5 层级交互（第二阶段）
+### 3.5 层级交互（第二阶段，方案已定 2026-07-28）
 
-- fine→coarse：细图编码后按区域 attention-pool 注入粗节点
-- coarse→fine：粗节点表示广播回区域内 landmark（拼接或 FiLM 调制）
-- **第一阶段不做**，先验证粗图本身有无增量
+**已定方案：coarse→fine FiLM 输入级调制（单向）**。
+
+背景：A9 消融证明并联接入下粗分支均值增量不显著（+0.0058，t≈0.85），
+层级交互是放大粗图贡献的关键路径。两个硬约束决定了方案空间：
+
+- FaceGNN 只读复用、只暴露图级输出 → 不复制代码时唯一注入点是细图输入特征 `x`；
+- fine→coarse 方向需要细图节点嵌入，必须复制 FaceGNN 代码，违背工程原则 1，排除。
+
+机制：
+
+1. RegionGNN 先跑一遍，取**节点级**嵌入 h_c（readout 之前，每图 9T×64）；
+   RegionGNN 增加 `return_nodes` 开关。
+2. 细节点 (t, landmark ℓ) 按固定 landmark→region 映射 gather 所属粗节点嵌入；
+   映射表（68 维索引）由 `LANDMARK_GROUPS_68` 预计算为 buffer。
+3. FiLM 调制：γ, β = Linear(64→4)，**只调制几何 4 维 `[x, y, dx, dy]`**，
+   region one-hot 不动：`x' = x·(1+γ) + β`。
+4. γ/β 的最后一层 **zero-init**，模型从"无调制"（≈A8）出发学习，保证不退化。
+5. 粗图 readout 并联路径**保留**（不丢 A8 的稳定性收益）；
+   RegionGNN 梯度两路回传（readout + 调制），端到端训练，不冻结。
+
+参数增量：2×(64×4+4) ≈ **520**，几乎免费。
+配置开关：`hierarchical: "none" | "coarse_to_fine_film"`（默认 none，向后兼容）。
+首个实验编号 **A10**（`hifag_a10_full_xattn_film.yaml` = A8 + film 开关）。
+
+备选（若 A10 增量仍不显著）：coarse→fine 特征拼接（h_c 投影 16 维 concat 到
+细节点输入，13→29 维）；再不行才考虑复制 FaceGNN 做双向。
 
 ### 3.6 融合与分类
 
@@ -118,8 +141,8 @@ landmark 序列 (T, 68, 2)
 | 粗节点特征 | 手工几何+运动+对称性描述子 | 学习聚合（方案 B/C，后期） |
 | 粗图空间边 | 解剖学邻接 | 全连接 |
 | 粗图编码器 | GAT | Transformer / +频带分解 |
-| 层级交互 | 无（第一阶段） | 双向消息传递（第二阶段） |
-| 融合 | concat | cross-attention |
+| 层级交互 | coarse→fine FiLM 输入调制（A10） | coarse→fine 特征拼接；双向（需复制 FaceGNN，暂不） |
+| 融合 | cross-attention（A8 起） | concat |
 
 ---
 
@@ -141,6 +164,9 @@ landmark 序列 (T, 68, 2)
 | A5 | 去掉运动特征（只留几何） | 运动贡献 |
 | A6 | 解剖学边 vs 全连接 | 粗图拓扑 |
 | A7 | 音频开/关 | 模态贡献 |
+| A8 | cross-attention 融合 | 融合方式（已实现，0.7863±0.0088） |
+| A9 | 去粗分支（fine+audio+xattn） | 粗分支在完整模态下的净增量（+0.0058，不显著） |
+| A10 | coarse→fine FiLM 层级交互 | 层级结构能否放大粗图贡献（第二阶段） |
 
 ---
 
