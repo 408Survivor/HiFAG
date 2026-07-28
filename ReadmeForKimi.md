@@ -1,6 +1,6 @@
 # HiFAG 项目状态备忘录（给 Kimi 的下一次会话）
 
-> 最后更新：2026-07-27
+> 最后更新：2026-07-28
 
 ## 协作工作流（用户定，必须遵守）
 
@@ -9,6 +9,8 @@
   exp_N ↔ (配置, seed, 指标) 对照表。每次用户跑完实验，Kimi 根据输出更新 INDEX.md
   并递增编号。给命令时若涉及 exp_N（如 test.py 的 checkpoint 路径），以 INDEX.md 为准。
 - 运行中断会留下残缺 exp_N 目录，重跑前先删除（见 INDEX.md 编号规则）。
+- **会话收尾约定**：每次会话结束前，把进度/结论同步进本备忘录 + INDEX.md + PROGRESS.md
+  并 commit & push；下次会话用户以"阅读 @ReadmeForKimi.md"开场恢复上下文。
 
 ## Git / GitHub
 
@@ -16,8 +18,10 @@
 - 本机 DNS 把 github.com 解析到不可达的 20.205.x.x；已用 `~/.ssh/config` 把
   `github.com` 直连真实 IP `140.82.112.3:22`（免 sudo 绕过），SSH key 为
   `~/.ssh/id_ed25519`。git push/pull 直接可用；若失效，重测一个 140.82.x.x 可用 IP 替换。
-- 注意：shell 里 `LD_LIBRARY_PATH` 含 `~/miniconda3/lib` 会让 /usr/bin/ssh 加载 conda 的
-  libcrypto 报 "OpenSSL version mismatch"。push 失败时用 `LD_LIBRARY_PATH= git push ...`（2026-07-28 遇到）。
+- ssh 曾报 "OpenSSL version mismatch"：根因是 `~/.bashrc` 里一行
+  `export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:...` 让系统 ssh 加载了 conda 的新版 libcrypto。
+  **该行已于 2026-07-28 由用户手动删除**，push/pull 应直接可用。若再出现，
+  先检查该行是否复发，临时绕过用 `LD_LIBRARY_PATH= git push ...`。
 - `gh` CLI 已装但未登录（网页 API 域名不通，暂不依赖它）。
 - 提交署名（repo 本地配置）：408Survivor / 408Survivor@users.noreply.github.com。
 
@@ -81,6 +85,8 @@ A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045（配对 +0.
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_11**。
 
 1. A7 加音频（fine+coarse+audio，对齐 0.797 基线，验证粗图在完整模态下的增量）——已和用户商定优先做。
+   做法：复制 `hifag_a3_fine_coarse.yaml` 为 `hifag_a7_full.yaml`，改 `use_audio: true`，
+   音频分支超参对齐 AFGNN：audio_in_channels 25 / hidden 64 / out 64 / layers 2 / heads 4。
 2. A4~A7 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
 3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
 
