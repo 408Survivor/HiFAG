@@ -79,16 +79,17 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-当前进度：**A2/A3 多 seed 已完成**（exp_1~exp_10，seeds 42~46）。
-A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045（配对 +0.011，4/5 seeds 为正，p≈0.086）。
-**基线修正**：AFGNN 0.797±0.011 含音频（use_audio: true）；纯面部基线 `face_only_enhanced` 仅 0.657（单 seed）。
-实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_11**。
+当前进度：**A2/A3/A7 多 seed 均已完成**（exp_1~exp_15，seeds 42~46）。
+A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045；A7 细+粗+音频 0.7756±0.0085。
+**基线对照**：AFGNN `face_enhanced_focal` 0.797±0.011（face+audio+cross-attention）；
+A7 差 −0.021 未追平，主要差距候选是融合方式（A7 concat vs 基线 cross-attention）。
+⚠️ A7 有 3/5 seeds best valid 在 ep3~5，音频分支收敛很快，留意欠训练。
+实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_16**。
 
-1. A7 加音频（fine+coarse+audio，对齐 0.797 基线，验证粗图在完整模态下的增量）——已和用户商定优先做。
-   配置 `experiments/configs/hifag_a7_full.yaml` 已建好（2026-07-28）：A3 基础上 `use_audio: true`，
-   音频分支 25/64/64/2/4 对齐 AFGNN `face_enhanced_focal`，融合仍 concat。参数量 93.1K，
-   合成数据前向冒烟通过。**待用户跑 seeds 42~46（将占用 exp_11~exp_15）**。
-2. A4~A7 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
+1. 追平 0.797 基线：在 `src/hifag/models/hifag.py` 加 cross-attention 融合
+   （对齐 AFGNN `fusion_type: cross_attention` + `fusion_hidden_dim: 64`），
+   替换 A7 的 concat，重跑 5 seeds。
+2. A4~A6 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
 3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
 
 ## SFAF 教训（不要重犯）

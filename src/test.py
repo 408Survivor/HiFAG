@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import glob
 import json
 import os
 import sys
@@ -36,8 +37,8 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="experiments/configs/hifag_a3_fine_coarse.yaml",
-        help="Path to config file",
+        default=None,
+        help="Path to config file (defaults to <exp_dir>/config.yaml when --exp_dir is given)",
     )
     parser.add_argument(
         "--checkpoint",
@@ -66,10 +67,24 @@ def main():
     )
     args = parser.parse_args()
 
+    # When --exp_dir is given, default config/checkpoint come from that folder.
+    if args.config is None:
+        if args.exp_dir is not None:
+            candidate = os.path.join(args.exp_dir, "config.yaml")
+            if os.path.exists(candidate):
+                args.config = candidate
+        if args.config is None:
+            args.config = "experiments/configs/hifag_a3_fine_coarse.yaml"
+
     cfg = load_config(args.config)
 
     if args.checkpoint is None:
-        args.checkpoint = cfg["training"]["checkpoint_path"]
+        if args.exp_dir is not None:
+            matches = sorted(glob.glob(os.path.join(args.exp_dir, "best_seed*.pt")))
+            if matches:
+                args.checkpoint = matches[0]
+        if args.checkpoint is None:
+            args.checkpoint = cfg["training"]["checkpoint_path"]
 
     # Resolve experiment directory for saving results.
     if args.exp_dir is not None:

@@ -41,6 +41,7 @@
       对照基线：AFGNN 纯面部 `face_only_enhanced` 0.657（单 seed）；
       `face_enhanced_focal` 0.797 ± 0.011 含音频，非纯面部对照（见 exp_2 记录）
 - [ ] A4~A7 消融（见 DESIGN.md 第 6 节）
+  - [x] A7 加音频（`hifag_a7_full.yaml`）→ exp_11~exp_15，test AUC 0.7756±0.0085（见下）
 - [ ] A1 细图单独（= AFGNN 基线，已有结果可引用，不必重跑）
 
 ---
@@ -97,6 +98,22 @@
 - 两者均高于 AFGNN 纯面部基线 0.657（单 seed），但差距不大；
   音频仍是通往 0.797 的主要缺口。
 - 明细：`experiments/exp_3/` ~ `experiments/exp_10/`；汇总表见 `experiments/INDEX.md`。
+
+### exp_11~exp_15 — A7 细+粗+音频（2026-07-28，seeds 42~46）
+
+| 配置 | test AUC (mean ± std) |
+|------|----------------------|
+| A7 细+粗+音频（concat） | **0.7756 ± 0.0085** |
+
+- 逐 seed：0.7782 / 0.7880 / 0.7756 / 0.7651 / 0.7713；valid AUC 0.794~0.818。
+- vs A3（无音频）0.6709：**+0.105**，音频模态是通往高性能的主要增量，符合预期。
+- vs AFGNN `face_enhanced_focal` 基线 0.797 ± 0.011：**−0.021，未追平**。
+  主要差异候选：融合方式（A7 为 concat，基线为 cross-attention）。
+- ⚠️ 3/5 seeds 的 best valid 出现在 ep3~5（早停 ep18~20）——音频分支收敛极快，
+  可能欠训练；后续可考虑复查 lr/scheduler，或直接上 cross-attention 融合。
+- 决策指向：要追平 0.797，下一步优先实现 cross-attention 融合（对齐基线），
+  而非继续调 concat 的超参。
+- 明细：`experiments/exp_11/` ~ `experiments/exp_15/`；汇总表见 `experiments/INDEX.md`。
 
 ---
 
