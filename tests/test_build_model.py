@@ -90,6 +90,25 @@ def test_region_features_shape():
     assert np.isfinite(feats).all()
 
 
+def test_region_features_drop_groups():
+    """A4/A5 ablation switch: dropping groups removes dims entirely."""
+    rng = np.random.default_rng(2)
+    coords = rng.standard_normal((NUM_FRAMES, NUM_LANDMARKS, 2))
+
+    full = compute_region_features(coords)
+    nosym = compute_region_features(coords, drop_groups=["symmetry"])
+    geom = compute_region_features(coords, drop_groups=["motion", "symmetry"])
+
+    assert nosym.shape == (NUM_FRAMES, NUM_REGIONS, 8)
+    assert geom.shape == (NUM_FRAMES, NUM_REGIONS, 4)
+    # Dims are removed, not zeroed: kept dims identical to the full descriptor.
+    assert np.array_equal(nosym, full[:, :, :8])
+    assert np.array_equal(geom, full[:, :, :4])
+
+    with pytest.raises(ValueError, match="Unknown feature groups"):
+        compute_region_features(coords, drop_groups=["bogus"])
+
+
 def test_loaders_attach_coarse(data_dir):
     cfg = _base_cfg(data_dir)
     loaders = build_loaders(cfg, augment=False)
@@ -138,6 +157,29 @@ def test_model_forward_full_edges(data_dir):
     with torch.no_grad():
         logit = model(batch)
     assert logit.shape == (BATCH_SIZE, 1)
+
+
+def test_model_forward_drop_groups(data_dir):
+    """A4/A5: dataset, norm stats and model agree on the reduced coarse dim."""
+    for drop, dim in [(["symmetry"], 8), (["motion", "symmetry"], 4)]:
+        cfg = _base_cfg(
+            data_dir,
+            use_fine=False,
+            use_coarse=True,
+            use_audio=False,
+            coarse_in_channels=dim,
+            coarse_drop_groups=drop,
+        )
+        loaders = build_loaders(cfg, augment=False)
+        model = build_model(cfg)
+        model.eval()
+
+        batch = next(iter(loaders["valid"]))
+        assert batch.coarse_x.shape == (BATCH_SIZE * NUM_FRAMES * NUM_REGIONS, dim)
+        with torch.no_grad():
+            logit = model(batch)
+        assert logit.shape == (BATCH_SIZE, 1)
+        assert torch.isfinite(logit).all()
 
 
 def test_model_forward_cross_attention(data_dir):

@@ -1,0 +1,62 @@
+# HiFAG A6: coarse-only, fully-connected spatial edges (ablation A6).
+# Purpose: coarse graph topology — anatomical adjacency (A2, 15 undirected
+# pairs) vs full connectivity. Baseline: A2 coarse-only 0.6599 +/- 0.0095.
+# 9 nodes per frame is tiny, so full connectivity is cheap; the question is
+# whether the anatomical prior helps or hurts on 800 samples.
+
+data:
+  processed_dir: /data/ltq/DVlog/processed_official_features
+  num_frames: 32
+  audio_num_frames: 32
+
+model:
+  use_fine: false
+  use_coarse: true
+  use_audio: false
+
+  # Coarse branch (RegionGNN)
+  coarse_in_channels: 10      # hand-crafted region descriptors (FEATURE_DIM)
+  coarse_hidden_channels: 64
+  coarse_out_channels: 64
+  coarse_num_layers: 2
+  coarse_heads: 4
+  coarse_edge_mode: "full"    # <-- the only change vs A2
+  coarse_normalize: true
+
+  # Classification head
+  mlp_hidden: 128
+  dropout: 0.5
+
+  # Fine face graph structure (still built by the dataset; the coarse
+  # descriptors are derived from its sampled coordinates)
+  add_static_edges: true
+  add_temporal_edges: true
+  add_region_onehot: true
+  add_self_loops: true
+
+# Data augmentation disabled
+augmentation:
+  enabled: false
+
+training:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  patience: 15
+  lr: 0.001
+  weight_decay: 0.0001
+  checkpoint_path: experiments/checkpoints/hifag_a6_coarse_full_edges_best.pt
+
+  early_stopping_metric: "auc"
+
+  # Loss: focal (SFAF best recipe; do NOT lower alpha below 0.25)
+  loss: "focal"
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+
+  scheduler:
+    type: "plateau"
+    factor: 0.5
+    patience: 5
+
+  grad_clip: 1.0

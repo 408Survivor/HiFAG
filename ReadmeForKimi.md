@@ -88,8 +88,14 @@ A8(x-attn) 0.7863±0.0088；A9(无粗) 0.7805±0.0123；A10(FiLM) 0.7824±0.0066
 实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_31**。
 
 待讨论后择路（下个会话先和用户定方向）：
-1. **A4~A6 消融**（对称性/运动特征、边拓扑）——解释粗图学到了什么，服务论文叙事；
-   A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
+1. **A4~A6 消融**（对称性/运动特征、边拓扑）——解释粗图学到了什么，服务论文叙事。
+   **代码已实现（2026-07-28）**：`compute_region_features` 加 `drop_groups` 开关
+   （geometry/motion/symmetry 三组，整组删维度），数据集/归一化统计/builders 全链路透传。
+   配置（均以 A2 coarse-only 为基底，归因最干净）：
+   - `hifag_a4_coarse_nosym.yaml`（去对称性，8 维）
+   - `hifag_a5_coarse_geom.yaml`（只留几何，4 维）
+   - `hifag_a6_coarse_full_edges.yaml`（全连接边）
+   pytest 16 项全绿，三配置冒烟通过。**待用户跑，占用 exp_31~exp_45**。
 2. 粗图信号的**粒度问题**：sanity 显示主信号是时序 std（样本级全局属性），
    帧级调制/逐帧图传播可能天然不匹配——可考虑样本级注入（粗图 embedding
    直接进融合层已有；或粗统计量绕过 GNN 直接 concat）。

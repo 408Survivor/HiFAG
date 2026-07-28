@@ -25,30 +25,31 @@ from data.dvlog_face_dataset import DVlogFaceDataset
 from models.graph_utils import compute_audio_norm_stats, sample_frames
 
 from hifag.data.region_features import (
-    FEATURE_DIM,
     NUM_REGIONS,
     compute_region_features,
+    feature_dim,
 )
 
 
 def compute_coarse_norm_stats(
-    visual: np.ndarray, num_frames: int
+    visual: np.ndarray, num_frames: int, drop_groups=()
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute train-set mean/std for coarse region descriptors.
 
     Args:
         visual: (N, T_full, 136) raw landmark sequences (train split).
         num_frames: frames sampled per graph (must match the dataset).
+        drop_groups: feature groups to drop (must match the dataset).
 
     Returns:
-        mean: (FEATURE_DIM,) averaged over samples, frames, regions.
-        std: (FEATURE_DIM,) with a small floor to avoid division by zero.
+        mean: (feature_dim(drop_groups),) averaged over samples, frames, regions.
+        std: (feature_dim(drop_groups),) with a small floor to avoid division by zero.
     """
     feats = []
     for seq in visual:
         sampled = sample_frames(seq, num_frames)
         coords = sampled.reshape(num_frames, 68, 2)
-        feats.append(compute_region_features(coords))
+        feats.append(compute_region_features(coords, drop_groups=drop_groups))
     feats = np.stack(feats, axis=0)  # (N, T, NUM_REGIONS, FEATURE_DIM)
     mean = feats.mean(axis=(0, 1, 2))
     std = feats.std(axis=(0, 1, 2))
@@ -65,8 +66,10 @@ class HiFAGFaceDataset(DVlogFaceDataset):
 
     Extra args:
         coarse_normalize: standardize descriptors with train-set stats.
-        coarse_norm_mean / coarse_norm_std: (FEATURE_DIM,) stats; required
+        coarse_norm_mean / coarse_norm_std: stats; required
             when coarse_normalize is True.
+        coarse_drop_groups: feature groups to drop (ablations A4/A5);
+            must match the stats and the model's coarse_in_channels.
     """
 
     def __init__(
@@ -75,6 +78,7 @@ class HiFAGFaceDataset(DVlogFaceDataset):
         coarse_normalize: bool = True,
         coarse_norm_mean: np.ndarray = None,
         coarse_norm_std: np.ndarray = None,
+        coarse_drop_groups=(),
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -85,6 +89,8 @@ class HiFAGFaceDataset(DVlogFaceDataset):
         self.coarse_normalize = coarse_normalize
         self.coarse_norm_mean = coarse_norm_mean
         self.coarse_norm_std = coarse_norm_std
+        self.coarse_drop_groups = tuple(coarse_drop_groups)
+        self.coarse_dim = feature_dim(self.coarse_drop_groups)
 
     def __getitem__(self, idx):
         data = super().__getitem__(idx)
@@ -98,12 +104,12 @@ class HiFAGFaceDataset(DVlogFaceDataset):
         )
         coords = data.x[:, 0:2].numpy().reshape(self.num_frames, 68, 2)
 
-        feats = compute_region_features(coords)  # (T, NUM_REGIONS, FEATURE_DIM)
+        feats = compute_region_features(coords, drop_groups=self.coarse_drop_groups)
         if self.coarse_normalize:
             feats = (feats - self.coarse_norm_mean) / self.coarse_norm_std
 
         data.coarse_x = torch.from_numpy(
-            feats.reshape(self.num_frames * NUM_REGIONS, FEATURE_DIM)
+            feats.reshape(self.num_frames * NUM_REGIONS, self.coarse_dim)
         ).float()
         return data
 
@@ -141,6 +147,7 @@ def get_hifag_loaders(
     audio_skip: int = 0,
     use_audio: bool = True,
     coarse_normalize: bool = True,
+    coarse_drop_groups=(),
     worker_init_fn=None,
 ):
     """Build train/valid/test DataLoaders with coarse region graphs attached.
@@ -161,7 +168,9 @@ def get_hifag_loaders(
     if coarse_normalize:
         train_visual_path = os.path.join(data_dir, "train_visual.npy")
         train_visual = np.load(train_visual_path).astype(np.float32)
-        coarse_mean, coarse_std = compute_coarse_norm_stats(train_visual, num_frames)
+        coarse_mean, coarse_std = compute_coarse_norm_stats(
+            train_visual, num_frames, drop_groups=coarse_drop_groups
+        )
 
     loaders = {}
     for split in ["train", "valid", "test"]:
@@ -207,6 +216,7 @@ def get_hifag_loaders(
             coarse_normalize=coarse_normalize,
             coarse_norm_mean=coarse_mean,
             coarse_norm_std=coarse_std,
+            coarse_drop_groups=coarse_drop_groups,
         )
 
         loaders[split] = DataLoader(

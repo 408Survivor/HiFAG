@@ -120,5 +120,6 @@ def build_loaders(
         audio_skip=m.get("audio_skip", 0),
         use_audio=m.get("use_audio", False),
         coarse_normalize=m.get("coarse_normalize", True),
+        coarse_drop_groups=m.get("coarse_drop_groups", []),
         worker_init_fn=worker_init_fn,
     )

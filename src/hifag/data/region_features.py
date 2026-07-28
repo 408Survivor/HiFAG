@@ -60,6 +60,34 @@ FEATURE_NAMES: List[str] = [
 ]
 FEATURE_DIM: int = len(FEATURE_NAMES)  # 10
 
+# Feature groups for ablations A4/A5 (drop entire groups from the descriptor).
+FEATURE_GROUPS: Dict[str, List[int]] = {
+    "geometry": [0, 1, 2, 3],
+    "motion": [4, 5, 6, 7],
+    "symmetry": [8, 9],
+}
+
+
+def kept_feature_indices(drop_groups=()) -> List[int]:
+    """Feature dims kept after dropping the named groups (ablations A4/A5)."""
+    unknown = set(drop_groups) - set(FEATURE_GROUPS)
+    if unknown:
+        raise ValueError(
+            f"Unknown feature groups: {sorted(unknown)}. "
+            f"Choose from {sorted(FEATURE_GROUPS)}"
+        )
+    return [
+        i
+        for group, dims in FEATURE_GROUPS.items()
+        if group not in drop_groups
+        for i in dims
+    ]
+
+
+def feature_dim(drop_groups=()) -> int:
+    """Descriptor dim after dropping the named groups."""
+    return len(kept_feature_indices(drop_groups))
+
 
 def compute_velocity(coords: np.ndarray) -> np.ndarray:
     """First-order temporal difference, zero-padded at the first frame.
@@ -90,14 +118,17 @@ def _polygon_area(points: np.ndarray) -> np.ndarray:
     return 0.5 * np.abs(np.sum(x * y_next - x_next * y, axis=1))
 
 
-def compute_region_features(coords: np.ndarray) -> np.ndarray:
+def compute_region_features(coords: np.ndarray, drop_groups=()) -> np.ndarray:
     """Compute per-frame, per-region descriptors from landmark coordinates.
 
     Args:
         coords: landmark coordinates, shape (T, 68, 2).
+        drop_groups: feature groups to drop (ablations A4/A5), any of
+            "geometry", "motion", "symmetry". Dims are removed entirely
+            (not zeroed), so the output dim is feature_dim(drop_groups).
 
     Returns:
-        features: shape (T, NUM_REGIONS, FEATURE_DIM), float32.
+        features: shape (T, NUM_REGIONS, feature_dim(drop_groups)), float32.
     """
     coords = np.asarray(coords, dtype=np.float64)
     T = coords.shape[0]
@@ -138,18 +169,24 @@ def compute_region_features(coords: np.ndarray) -> np.ndarray:
             mean_vels[:, left, :] - mean_vels[:, right, :], axis=-1
         )
 
+    if drop_groups:
+        feats = feats[:, :, kept_feature_indices(drop_groups)]
+
     return feats.astype(np.float32)
 
 
-def compute_region_features_batch(coords: np.ndarray) -> np.ndarray:
+def compute_region_features_batch(coords: np.ndarray, drop_groups=()) -> np.ndarray:
     """Batched wrapper over compute_region_features.
 
     Args:
         coords: (B, T, 68, 2)
+        drop_groups: feature groups to drop (see compute_region_features).
     Returns:
-        features: (B, T, NUM_REGIONS, FEATURE_DIM)
+        features: (B, T, NUM_REGIONS, feature_dim(drop_groups))
     """
-    return np.stack([compute_region_features(c) for c in coords], axis=0)
+    return np.stack(
+        [compute_region_features(c, drop_groups=drop_groups) for c in coords], axis=0
+    )
 
 
 def feature_labels() -> List[str]:
