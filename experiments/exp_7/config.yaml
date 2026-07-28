@@ -1,0 +1,46 @@
+data:
+  processed_dir: /data/ltq/DVlog/processed_official_features
+  num_frames: 32
+  audio_num_frames: 32
+model:
+  use_fine: true
+  use_coarse: true
+  use_audio: false
+  face_in_channels: 13
+  face_hidden_channels: 128
+  face_out_channels: 128
+  face_num_layers: 3
+  face_heads: 4
+  coarse_in_channels: 10
+  coarse_hidden_channels: 64
+  coarse_out_channels: 64
+  coarse_num_layers: 2
+  coarse_heads: 4
+  coarse_edge_mode: anatomical
+  coarse_normalize: true
+  mlp_hidden: 128
+  dropout: 0.5
+  add_static_edges: true
+  add_temporal_edges: true
+  add_region_onehot: true
+  add_self_loops: true
+augmentation:
+  enabled: false
+training:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  patience: 15
+  lr: 0.001
+  weight_decay: 0.0001
+  checkpoint_path: /home/ltq/DepressionCode/DepGNN/HiFAG/experiments/exp_7/best.pt
+  early_stopping_metric: auc
+  loss: focal
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  scheduler:
+    type: plateau
+    factor: 0.5
+    patience: 5
+  grad_clip: 1.0
+_config_path: experiments/configs/hifag_a3_fine_coarse.yaml

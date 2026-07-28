@@ -1,0 +1,13 @@
+{
+  "split": "test",
+  "checkpoint": "experiments/exp_3/best_seed43.pt",
+  "config": "experiments/configs/hifag_a2_coarse_only.yaml",
+  "timestamp": "2026-07-28T17:37:37.101325",
+  "metrics": {
+    "accuracy": 0.6226415094339622,
+    "precision": 0.6187845303867403,
+    "recall": 0.9105691056910569,
+    "f1": 0.7368421052631579,
+    "auc": 0.6596327761030419
+  }
+}

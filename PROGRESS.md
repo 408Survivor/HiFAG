@@ -35,9 +35,11 @@
 - [x] 全部完成（见"已完成"）；层级交互（fine↔coarse 消息传递）为第二阶段，未做
 
 ### 4. 实验（下一步，按顺序）
-- [ ] A2 粗图单独（`hifag_a2_coarse_only.yaml`）
-- [ ] A3 细+粗 concat（`hifag_a3_fine_coarse.yaml`，核心假设）
-- [ ] 多 seed（42~46）验证。对照基线：AFGNN `face_enhanced_focal` Test AUC 0.797 ± 0.011
+- [x] A2 粗图单独（`hifag_a2_coarse_only.yaml`）→ exp_1，test AUC 0.6728
+- [x] A3 细+粗 concat（`hifag_a3_fine_coarse.yaml`，核心假设）→ exp_2，test AUC 0.6714（细分支零增量）
+- [x] 多 seed（42~46）验证 → A2: 0.6599±0.0095 / A3: 0.6709±0.0045（见 exp_3~exp_10 记录）。
+      对照基线：AFGNN 纯面部 `face_only_enhanced` 0.657（单 seed）；
+      `face_enhanced_focal` 0.797 ± 0.011 含音频，非纯面部对照（见 exp_2 记录）
 - [ ] A4~A7 消融（见 DESIGN.md 第 6 节）
 - [ ] A1 细图单独（= AFGNN 基线，已有结果可引用，不必重跑）
 
@@ -66,6 +68,35 @@
   但明显低于细图基线 0.797 —— 符合预期，粗图定位是"补充信号"而非替代。
 - 注意：valid AUC 到 ep31 仍在缓升（0.7127），patience=15 可能略紧，多 seed 后再判断。
 - 明细：`experiments/exp_1/`；索引：`experiments/INDEX.md`。
+
+### exp_2 — A3 细+粗 concat（2026-07-28，seed 42）
+
+- best valid AUC 0.7181（ep6），早停 ep21；**test AUC 0.6714**（acc 0.660 / F1 0.690）。
+- 与 A2 粗图单独（0.6728）**持平** —— 加入细分支没有带来增量，粗细信号在 concat
+  融合下高度冗余（或细分支在联合训练中被粗分支压制）。
+- **基线对照修正**：AFGNN `face_enhanced_focal` 0.797 ± 0.011 含**音频**模态
+  （`use_audio: true` + cross-attention），不是纯面部基线；AFGNN 纯面部
+  `face_only_enhanced`（weighted_bce，单 seed）Test AUC **0.657**。
+  A2/A3（无音频）均已略超纯面部基线，与 0.797 的差距来自音频。
+- 观察：valid 上 recall ≈ 0.10（acc 0.47），模型在 valid 接近全预测负例但 AUC 仍有
+  0.71 —— 排序信号在、阈值偏移；test 阈值 0.5 下 recall 0.65，不算坍缩。
+- 明细：`experiments/exp_2/`；索引：`experiments/INDEX.md`。
+- ⚠️ "细分支零增量"仅是 seed 42 单点结论，多 seed 后已修正（见下节）。
+
+### exp_3~exp_10 — A2/A3 多 seed（2026-07-28，seeds 42~46）
+
+| 配置 | test AUC (mean ± std) |
+|------|----------------------|
+| A2 粗图单独 | 0.6599 ± 0.0095 |
+| A3 细+粗 | **0.6709 ± 0.0045** |
+
+- 配对（同 seed）A3−A2 均值 **+0.011**，5 个 seed 中 4 个为正（配对 t≈2.27, p≈0.086，
+  边缘显著）。**修正 exp_2 的单 seed 结论：细分支有小但真实存在的增量，且让训练更稳**
+  （A3 std 0.0045 vs A2 0.0095；valid AUC A3 一致 0.73+ vs A2 0.70±）。
+- A2 seed 46 训练不稳（best 停在 ep1），A3 无此现象。
+- 两者均高于 AFGNN 纯面部基线 0.657（单 seed），但差距不大；
+  音频仍是通往 0.797 的主要缺口。
+- 明细：`experiments/exp_3/` ~ `experiments/exp_10/`；汇总表见 `experiments/INDEX.md`。
 
 ---
 

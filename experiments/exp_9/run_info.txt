@@ -1,0 +1,3 @@
+Start time: 2026-07-28T17:29:20.121436
+Command: src/train.py --config experiments/configs/hifag_a3_fine_coarse.yaml --seed 45
+Config file: experiments/configs/hifag_a3_fine_coarse.yaml
