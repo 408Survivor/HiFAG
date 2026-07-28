@@ -115,6 +115,22 @@
   而非继续调 concat 的超参。
 - 明细：`experiments/exp_11/` ~ `experiments/exp_15/`；汇总表见 `experiments/INDEX.md`。
 
+### exp_16~exp_20 — A8 细+粗+音频 + cross-attention 融合（2026-07-28，seeds 42~46）
+
+| 配置 | test AUC (mean ± std) |
+|------|----------------------|
+| A8 细+粗+音频（x-attn） | **0.7863 ± 0.0088** |
+
+- 逐 seed：0.7938 / 0.7934 / 0.7906 / 0.7769 / 0.7766；valid AUC 0.797~0.821。
+- 融合实现：face 侧 = fine+coarse concat（192 维）vs audio（64 维），复用 AFGNN
+  `CrossModalAttentionFusion`（hidden 64），参数量 151.0K。
+- 配对（同 seed）A8−A7：+0.0156/+0.0054/+0.0150/+0.0118/+0.0053，
+  **5/5 全正，均值 +0.0106，配对 t≈4.70（p<0.01）**——cross-attention 显著优于 concat。
+- vs 基线 0.797 ± 0.011：**−0.011，落入基线 1 个 std 内，基本追平**。
+- 附带收益：A8 训练曲线健康（best valid 多在 ep13~41），A7 的 ep3~5 早停现象消失，
+  证实 concat 下音频分支确实欠训练。
+- 明细：`experiments/exp_16/` ~ `experiments/exp_20/`；汇总表见 `experiments/INDEX.md`。
+
 ---
 
 ## 当前阻塞 / 风险

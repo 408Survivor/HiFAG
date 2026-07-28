@@ -79,20 +79,18 @@ HiFAG（Hierarchical Facial-Audio Graph Network）：在 AFGNN 的 68-landmark �
 
 ## 未落实（下一个会话的任务，按顺序）
 
-当前进度：**A2/A3/A7 多 seed 均已完成**（exp_1~exp_15，seeds 42~46）。
-A2 粗图单独 test AUC 0.6599±0.0095；A3 细+粗 0.6709±0.0045；A7 细+粗+音频 0.7756±0.0085。
-**基线对照**：AFGNN `face_enhanced_focal` 0.797±0.011（face+audio+cross-attention）；
-A7 差 −0.021 未追平，主要差距候选是融合方式（A7 concat vs 基线 cross-attention）。
-⚠️ A7 有 3/5 seeds best valid 在 ep3~5，音频分支收敛很快，留意欠训练。
-实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_16**。
+当前进度：**A2/A3/A7/A8 多 seed 均已完成**（exp_1~exp_20，seeds 42~46）。
+A2 0.6599±0.0095；A3 0.6709±0.0045；A7(concat) 0.7756±0.0085；
+**A8(x-attn) 0.7863±0.0088 —— 与基线 0.797±0.011 基本追平（差 −0.011，在基线 1 std 内）**。
+A8−A7 配对 +0.0106，5/5 seeds 为正，t≈4.70（p<0.01），cross-attention 显著优于 concat。
+实验登记与编号以 `experiments/INDEX.md` 为准，**下一个可用编号 exp_21**。
 
-1. 追平 0.797 基线：cross-attention 融合已实现（2026-07-28）——
-   `hifag.py` 复用 AFGNN `CrossModalAttentionFusion`（face 侧 = fine+coarse concat 192 维
-   vs audio 64 维，hidden 64），配置 `experiments/configs/hifag_a8_full_xattn.yaml`，
-   参数量 151.0K，pytest 11 项全绿 + 合成前向通过。
-   **待用户跑 seeds 42~46（将占用 exp_16~exp_20）**，与 A7 concat 配对比较。
+1. **A9：fine+audio+xattn（去掉粗分支）**——隔离粗分支在完整模态下的增量。
+   这是当前最关键的消融：A8 只是追平基线，尚未证明粗图在完整模型里有正贡献。
+   做法：复制 `hifag_a8_full_xattn.yaml` 为 `hifag_a9_fine_audio_xattn.yaml`，改 `use_coarse: false`。
 2. A4~A6 消融（对称性/运动特征、边拓扑）。A4/A5 需在 `compute_region_features` 加特征组开关（当前未实现）。
-3. 第二阶段：层级交互（fine↔coarse 消息传递），concat 增量偏小（+0.011），可考虑借此放大。
+3. 第二阶段：层级交互（fine↔coarse 消息传递）。若 A9 显示粗分支在完整模态下增量小，
+   层级交互是放大它的候选手段。
 
 ## SFAF 教训（不要重犯）
 
