@@ -187,6 +187,19 @@
   （区域×描述子 Cohen's d 热图 + 面部区域着色图，脚本 `src/scripts/plot_region_effects.py`）。
 - **重跑计划**：A2/A8/A9 × 5 seeds（exp_31~45），A4~A6 顺延（exp_46~60）。
   注意 AFGNN 基线 0.797 是修复前坐标训练的，修复后数字与之不完全可比。
+- **bug 起源复盘**：
+  1. D-Vlog 官方视觉特征来自 OpenFace，输出列惯例就是 `x_0..x_67, y_0..y_67`
+     分块布局，存成 npy 时原样保留；
+  2. AFGNN **initial commit** 就按交错假设写了 `reshape(T, 68, 2)`，README 还把
+     "136 = 68 × 2 (x, y)" 当事实记录——假设从未被实证；
+  3. 三个项目没人发现的原因：GNN 对坐标语义无感（边/one-hot 按索引），
+     错配特征仍含相关几何信息，训练结果（0.797）看起来完全正常；
+  4. AFGNN 的 figure2 系列脸部可视化（`visualization/draw_figure2_*.py`）
+     全部使用**手写示意坐标**（"schematic frontal face"），从未从 npy 画过
+     真实坐标；唯一加载真实数据的 figure3 画的是音频。示意图验证的是
+     "我以为的结构"，验证不了"实际读进来的坐标"；
+  5. HiFAG 的区域着色图第一次从 npy 取真实坐标上脸，bug 立刻暴露。
+  教训见 DESIGN.md 工程原则第 7 条。
 
 ---
 

@@ -95,6 +95,12 @@ D-Vlog 特征是 OpenFace 布局 `[x_0..x_67, y_0..y_67]`，此前按交错 `res
 
 ## SFAF 教训（不要重犯）
 
+0. **坐标布局 bug（2026-07-28 发现，已修复）**：D-Vlog 特征是 OpenFace 布局
+   `[x_0..x_67, y_0..y_67]`，AFGNN initial commit 起就按交错 reshape 误读，
+   exp_1~exp_30 及 AFGNN 基线均为修复前结果。起源复盘见 PROGRESS.md；
+   核心教训：数据布局假设必须用**真实数据**实证（AFGNN 的脸部可视化全用
+   手写示意坐标，所以三个项目都没发现）。已固化进 DESIGN.md 工程原则第 7 条。
+
 1. 小数据（~800 样本）上架构复杂度是负收益：GRU+Transformer 堆叠（805K 参数）不如简单 GNN（112K）。
 2. 特征维度必须断言，禁止静默截断（SFAF 曾静默丢弃 region one-hot，误导了一个实验结论）。
 3. focal α 不要低于 0.25（α=0.1 曾导致模型坍缩全预测负例）。
